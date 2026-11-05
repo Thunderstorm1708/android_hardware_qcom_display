@@ -711,9 +711,9 @@ HWC3::Error HWCLayer::SetLayerZOrder(uint32_t z) {
   bool fod_pressed = z & FOD_PRESSED_LAYER_ZORDER;
   if (fod_pressed_ != fod_pressed) {
     fod_pressed_ = fod_pressed;
-    z &= ~FOD_PRESSED_LAYER_ZORDER;
     geometry_changes_ |= kZOrder;
   }
+  z &= ~FOD_PRESSED_LAYER_ZORDER;
 #endif
 
   if (z_ != z) {
