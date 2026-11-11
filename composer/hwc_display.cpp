@@ -692,6 +692,46 @@ static bool IsHDRLayerPresent(Layer *layer) {
   return false;
 }
 
+#ifdef UDFPS_ZPOS
+// The UDFPS illumination surface is a full-screen, mostly transparent layer that only
+// draws the dot over the sensor. Crop it to the sensor area (vendor.display.udfps_crop =
+// "x,y,radius" in display pixels, plus a small margin), so the composition strategy can
+// give it its own small SDE pipe instead of folding it into the GPU target. Only an
+// unscaled layer that fully covers the area is cropped; anything else is left alone.
+static void CropFodLayerToSensor(Layer *layer) {
+  static int cx = -1, cy = -1, r = -1;
+  if (cx < 0) {
+    char value[PROPERTY_VALUE_MAX] = {};
+    property_get("vendor.display.udfps_crop", value, "");
+    if (sscanf(value, "%d,%d,%d", &cx, &cy, &r) != 3 || r <= 0) {
+      cx = 0;
+      r = 0;
+    }
+  }
+  if (r <= 0)
+    return;
+
+  const float margin = 8.0f;
+  LayerRect crop(cx - r - margin, cy - r - margin, cx + r + margin, cy + r + margin);
+  LayerRect &dst = layer->dst_rect;
+  LayerRect &src = layer->src_rect;
+  float dst_w = dst.right - dst.left, dst_h = dst.bottom - dst.top;
+  if (dst_w != src.right - src.left || dst_h != src.bottom - src.top ||
+      layer->transform.rotation != 0.0f ||
+      layer->transform.flip_horizontal || layer->transform.flip_vertical)
+    return;
+  if (crop.left < dst.left || crop.top < dst.top || crop.right > dst.right ||
+      crop.bottom > dst.bottom)
+    return;
+
+  src.left += crop.left - dst.left;
+  src.top += crop.top - dst.top;
+  src.right = src.left + (crop.right - crop.left);
+  src.bottom = src.top + (crop.bottom - crop.top);
+  dst = crop;
+}
+#endif
+
 void HWCDisplay::BuildLayerStack() {
   layer_stack_ = LayerStack();
   display_rect_ = LayerRect();
@@ -720,6 +760,7 @@ void HWCDisplay::BuildLayerStack() {
 #ifdef UDFPS_ZPOS
     if (hwc_layer->IsFodPressed()) {
       layer->flags.fod_pressed = true;
+      CropFodLayerToSensor(layer);
     }
 #endif
 
