@@ -109,6 +109,12 @@
 #include <display/drm/sde_drm.h>
 #endif
 
+#ifdef UDFPS_ZPOS
+#ifndef FOD_IN_CLIENT_TARGET_ZORDER
+#define FOD_IN_CLIENT_TARGET_ZORDER 0x10000000u
+#endif
+#endif
+
 #define __CLASS__ "HWDeviceDRM"
 
 #ifndef DRM_FORMAT_MOD_QCOM_COMPRESSED
@@ -1515,7 +1521,9 @@ void HWDeviceDRM::SetupAtomic(Fence::ScopedRef &scoped_ref, HWLayersInfo *hw_lay
 #ifdef UDFPS_ZPOS
           uint32_t z_order = pipe_info->z_order;
           if (layer.flags.fod_pressed) {
-            z_order |= FOD_PRESSED_LAYER_ZORDER;
+            // The GPU target only carries the flag when the UDFPS dot was composed into it
+            z_order |= (layer.composition == kCompositionGPUTarget) ?
+                           FOD_IN_CLIENT_TARGET_ZORDER : FOD_PRESSED_LAYER_ZORDER;
           }
           drm_atomic_intf_->Perform(DRMOps::PLANE_SET_ZORDER, pipe_id, z_order);
 #else

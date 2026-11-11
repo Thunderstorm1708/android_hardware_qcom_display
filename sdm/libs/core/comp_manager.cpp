@@ -455,6 +455,25 @@ DisplayError CompManager::Prepare(Handle display_ctx, DispLayerStack *disp_layer
     }
   }
 
+#ifdef UDFPS_ZPOS
+  // When the UDFPS dot layer ended up in the GPU target, mark the GPU target so the
+  // kernel knows the dot is inside it and keeps the sensor area undimmed for it.
+  if (error == kErrorNone) {
+    bool fod_in_target = false;
+    for (uint32_t i = 0; i < disp_layer_stack->info.app_layer_count; i++) {
+      Layer *layer = disp_layer_stack->stack->layers.at(i);
+      if (layer->flags.fod_pressed && layer->composition == kCompositionGPU) {
+        fod_in_target = true;
+        break;
+      }
+    }
+    for (auto &hw_layer : disp_layer_stack->info.hw_layers) {
+      if (hw_layer.composition == kCompositionGPUTarget)
+        hw_layer.flags.fod_pressed = fod_in_target;
+    }
+  }
+#endif
+
   if (error != kErrorNone) {
     resource_intf_->Stop(display_resource_ctx, disp_layer_stack);
     DLOGE("Composition strategies exhausted for display = %d-%d. (first frame = %s)",
