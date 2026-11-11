@@ -425,6 +425,29 @@ DisplayError CompManager::Prepare(Handle display_ctx, DispLayerStack *disp_layer
     if (!exit) {
       LayerFeedback updated_feedback(disp_layer_stack->info.app_layer_count);
       error = resource_intf_->Prepare(display_resource_ctx, disp_layer_stack, &updated_feedback);
+      // On Pong's 6.12 kernel the vendor resource manager rejects nearly every strategy
+      // with a performance validation failure, even plans the hardware handles easily,
+      // and falls back to GPU composition. Accept a rejected plan that uses SDE pipes
+      // anyway with the maximum clock and bandwidth votes, and let the kernel's atomic
+      // check decide: if the kernel rejects it, DisplayBase retries the next strategy.
+      if (error == kErrorPerfValidation) {
+        bool has_sde = false;
+        for (uint32_t i = 0; i < disp_layer_stack->info.app_layer_count; i++) {
+          if (disp_layer_stack->stack->layers.at(i)->composition == kCompositionSDE) {
+            has_sde = true;
+            break;
+          }
+        }
+        if (has_sde) {
+          HWQosData &qos = disp_layer_stack->info.qos_data;
+          qos.valid = true;
+          qos.clock_hz = hw_res_info_.max_sde_clk;
+          qos.core_ab_bps = qos.core_ib_bps = qos.llcc_ab_bps = qos.llcc_ib_bps =
+              qos.dram_ab_bps = qos.dram_ib_bps =
+              hw_res_info_.dyn_bw_info.total_bw_limit[kBwVFEOff] * 1000ULL;
+          error = kErrorNone;
+        }
+      }
       // Exit if successfully prepared resource, else try next strategy.
       exit = (error == kErrorNone);
       if (!exit)
